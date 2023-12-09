@@ -2,15 +2,13 @@ defaults:
   - meta_base
 
 name: snail
-#n_task: 4
-#task_update_num: 1
 
-snail_inner_lr: 0.01
+# snail_inner_lr: 0.01
 
-# MAML reqires special gradient updates in backbone
+# SNAIL reqires special gradient updates in backbone
 # fast_weight: True
 
 # For instantiate API
 cls:
   _target_: methods.snail.SNAIL
-  inner_lr: ${method.snail_inner_lr}
+  # inner_lr: ${method.snail_inner_lr}
