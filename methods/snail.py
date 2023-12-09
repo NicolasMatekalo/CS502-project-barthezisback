@@ -138,7 +138,7 @@ class SNAIL(MetaTemplate):
                 
     def correct(self, x, y=None):
         scores, pred_targets = self.set_forward(x, y)
-        y_query = pred_targets.numpy().tolist()
+        y_query = pred_targets.cpu().numpy().tolist()
 
         topk_scores, topk_labels = scores.data.topk(1, 1, True, True)
         topk_ind = topk_labels.cpu().numpy()
