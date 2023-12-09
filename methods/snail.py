@@ -49,7 +49,7 @@ class SNAIL(MetaTemplate):
         return one_hot, idxs
 
     def forward(self, input, labels):
-        x = self.encoder(input)
+        x = self.feature(input)
         batch_size = int(labels.size()[0] / (self.n_way * self.n_support + 1))
         last_idxs = [(i + 1) * (self.n_way * self.n_support + 1) - 1 for i in range(batch_size)]
         labels[last_idxs] = torch.Tensor(np.zeros((batch_size, labels.size()[1]))).to(self.device)
