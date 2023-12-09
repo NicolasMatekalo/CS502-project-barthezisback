@@ -31,7 +31,7 @@ class SNAIL(MetaTemplate):
         num_channels += 256
         self.fc = nn.Linear(num_channels, n_way)
         
-    def get_label_map(labels):
+    def get_label_map(self, labels):
         # Create a map from labels to indexes
         labels = labels.numpy()
         unique = np.unique(labels)
@@ -39,7 +39,7 @@ class SNAIL(MetaTemplate):
         
         return map
     
-    def get_one_hots(labels, map):
+    def get_one_hots(self, labels, map):
         # Map labels to their one-hot representations
         labels = labels.numpy()
         idxs = [map[labels[i]] for i in range(labels.size)]
