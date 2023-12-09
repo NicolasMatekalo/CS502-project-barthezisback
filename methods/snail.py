@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import wandb
 
-from blocks import *
+from methods.blocks import *
 from methods.meta_template import MetaTemplate
 
 class SNAIL(MetaTemplate):
@@ -96,11 +96,11 @@ class SNAIL(MetaTemplate):
         # all_labels are of shape (n_query * n_cls, (N * K + 1), num_cls)
         # pred_tagets are of shape (n_query * n_cls)
 
-        labels = torch.Tensor(all_labels).view(-1, self.n_way)
-        pred_targets = torch.Tensor(pred_targets).long()
+        labels = torch.Tensor(all_labels).view(-1, self.n_way).to(self.device)
+        pred_targets = torch.Tensor(pred_targets).long().to(self.device)
         
         sequences = torch.stack(sequences)
-        sequences = sequences.view(-1, x.shape[2])
+        sequences = sequences.view(-1, x.shape[2]).to(self.device)
         
         # Forward to the model
         output = self.forward(sequences, labels)
