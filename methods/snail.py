@@ -60,7 +60,7 @@ class SNAIL(MetaTemplate):
         x = self.tc1(x)
         x = self.attention2(x)
         x = self.tc2(x)
-        x = self.attention3(x)
+        x = self.attention3(x).permute(0,2,1)
         x = self.conv1d(x)
         
         return x
