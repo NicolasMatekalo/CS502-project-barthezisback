@@ -29,7 +29,7 @@ class SNAIL(MetaTemplate):
         self.attention3 = AttentionBlock(num_channels, 512, 256)
         
         num_channels += 256
-        self.fc = nn.Linear(num_channels, n_way)
+        self.conv1d = nn.Conv1d(num_channels, n_way, 1)
         
     def get_label_map(self, labels):
         # Create a map from labels to indexes
@@ -61,7 +61,7 @@ class SNAIL(MetaTemplate):
         x = self.attention2(x)
         x = self.tc2(x)
         x = self.attention3(x)
-        x = self.fc(x)
+        x = self.conv1d(x)
         
         return x
     
