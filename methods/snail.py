@@ -29,7 +29,8 @@ class SNAIL(MetaTemplate):
         self.attention3 = AttentionBlock(num_channels, 512, 256)
         
         num_channels += 256
-        self.conv1d = nn.Conv1d(num_channels, n_way, 1)
+        self.out = nn.Linear(num_channels, n_way)
+        # self.out = nn.Conv1d(num_channels, n_way, 1)
         
     def get_label_map(self, labels):
         # Create a map from labels to indexes
@@ -60,8 +61,9 @@ class SNAIL(MetaTemplate):
         x = self.tc1(x)
         x = self.attention2(x)
         x = self.tc2(x)
-        x = self.attention3(x).permute(0,2,1)
-        x = self.conv1d(x)
+        # x = self.attention3(x).permute(0,2,1)
+        x = self.attention3(x)
+        x = self.out(x)
         
         return x
     
@@ -96,8 +98,8 @@ class SNAIL(MetaTemplate):
         # all_labels are of shape (n_query * n_cls, (N * K + 1), num_cls)
         # pred_tagets are of shape (n_query * n_cls)
 
-        labels = torch.Tensor(all_labels).view(-1, self.n_way).to(self.device)
-        pred_targets = torch.Tensor(pred_targets).long().to(self.device)
+        labels = torch.Tensor(np.array(all_labels)).view(-1, self.n_way).to(self.device)
+        pred_targets = torch.Tensor(np.array(pred_targets)).long().to(self.device)
         
         sequences = torch.stack(sequences)
         sequences = sequences.view(-1, x.shape[2]).to(self.device)
