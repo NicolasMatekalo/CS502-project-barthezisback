@@ -53,9 +53,9 @@ class TCBlock(nn.Module):
 class AttentionBlock(nn.Module):
     def __init__(self, in_channels, key_size, value_size):
         super(AttentionBlock, self).__init__()
-        self.linear_query = nn.Linear(in_channels, key_size)
-        self.linear_keys = nn.Linear(in_channels, key_size)
-        self.linear_values = nn.Linear(in_channels, value_size)
+        self.query_layer = nn.Linear(in_channels, key_size)
+        self.key_layer = nn.Linear(in_channels, key_size)
+        self.value_layer = nn.Linear(in_channels, value_size)
         self.sqrt_key_size = math.sqrt(key_size)
 
     def forward(self, minibatch):
@@ -67,6 +67,6 @@ class AttentionBlock(nn.Module):
         mask = torch.triu(mask, 1)
         mask = mask.unsqueeze(0).expand_as(logits)
         logits.data.masked_fill_(mask, float('-inf'))
-        probs = F.softmax(logits / self.sqrt_k, dim=-1)
+        probs = F.softmax(logits / self.sqrt_key_size, dim=-1)
         read = torch.bmm(probs, values)
         return torch.cat((minibatch, read), dim=2)
