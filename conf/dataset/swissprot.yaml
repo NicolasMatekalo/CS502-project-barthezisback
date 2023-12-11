@@ -16,7 +16,7 @@ backbone:
   _target_: backbones.resnet.ResNet
   block: backbones.blocks.SimpleBlock
   list_of_num_layers: [1, 1, 1, 1]
-  layer_dim: [64, 128, 256, 512]
+  list_of_out_dims: [64, 128, 256, 512]
 
 train_classes: 7195
 
