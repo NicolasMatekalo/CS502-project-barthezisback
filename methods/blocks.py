@@ -39,7 +39,7 @@ class TCBlock(nn.Module):
         blocks = []
         channel_count = in_channels
         for layer in range(layer_count):
-            block = DenseBlock(channel_count, filters, dilation=2**layer)
+            block = DenseBlock(channel_count, 2**layer, filters)
             blocks.append(block)
             channel_count += filters
         self.blocks = nn.Sequential(*blocks)
@@ -67,6 +67,6 @@ class AttentionBlock(nn.Module):
         mask = torch.triu(mask, 1)
         mask = mask.unsqueeze(0).expand_as(logits)
         logits.data.masked_fill_(mask, float('-inf'))
-        probs = F.softmax(logits / self.sqrt_k, dim=2)
+        probs = F.softmax(logits / self.sqrt_k, dim=-1)
         read = torch.bmm(probs, values)
         return torch.cat((minibatch, read), dim=2)
