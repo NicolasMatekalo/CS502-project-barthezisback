@@ -31,8 +31,8 @@ def initialize_dataset_model(cfg):
     if cfg.method.fast_weight:
         backbone = instantiate(cfg.backbone, x_dim=train_dataset.dim, fast_weight=True)
     else:
-        # backbone = instantiate(cfg.backbone, x_dim=train_dataset.dim)
-        backbone = instantiate(cfg.backbone)
+        backbone = instantiate(cfg.backbone, x_dim=train_dataset.dim)
+        # backbone = instantiate(cfg.backbone)
 
     # Instantiate few-shot method class
     model = instantiate(cfg.method.cls, backbone=backbone)
