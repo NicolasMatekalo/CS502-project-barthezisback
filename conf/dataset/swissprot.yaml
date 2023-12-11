@@ -13,10 +13,7 @@ dataset:
     _target_: datasets.prot.swissprot.SPSetDataset
 
 backbone:
-  _target_: backbones.resnet.ResNet
-  block: backbones.blocks.SimpleBlock
-  list_of_num_layers: [1, 1, 1, 1]
-  list_of_out_dims: [64, 128, 256, 512]
+  _target_: backbones.resnet.ResNet10
 
 train_classes: 7195
 
