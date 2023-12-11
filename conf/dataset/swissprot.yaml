@@ -20,5 +20,5 @@ train_classes: 7195
 
 n_way: 5
 n_shot: 5
-n_query: 5
+n_query: 15
 
