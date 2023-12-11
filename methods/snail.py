@@ -61,7 +61,6 @@ class SNAIL(MetaTemplate):
         x = self.tc1(x)
         x = self.attention2(x)
         x = self.tc2(x)
-        # x = self.attention3(x).permute(0,2,1)
         x = self.attention3(x)
         x = self.out(x)
         
@@ -82,13 +81,17 @@ class SNAIL(MetaTemplate):
         n_query = x.shape[1] - self.n_support
         for i in range(n_query):
             for j in range(self.n_way):
+                indices = torch.randperm(support_set.shape[0])
+                
+                sup_set = support_set[indices]
+                sup_labels = support_labels[indices]
                 query_sample = x[j, self.n_support + i, :].unsqueeze(0) # get a new query sample
-                seq = torch.cat((support_set, query_sample), dim=0) # sequence of N x K + 1 samples
+                seq = torch.cat((sup_set, query_sample), dim=0) # sequence of N x K + 1 samples
                 sequences.append(seq) # append to list of sequences
                 
                 # Get labels one-hot representations and indexes
                 last_seq_label = y[j, self.n_support + i]
-                seq_labels = torch.cat((support_labels, torch.Tensor([last_seq_label]).long())) # N x K + 1 labels
+                seq_labels = torch.cat((sup_labels, torch.Tensor([last_seq_label]).long())) # N x K + 1 labels
                 labels, idxs = self.get_one_hots(seq_labels, label_map)
 
                 all_labels.append(labels)
