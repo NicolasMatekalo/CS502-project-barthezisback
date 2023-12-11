@@ -33,7 +33,7 @@ class SNAIL(MetaTemplate):
         # self.out = nn.Conv1d(num_channels, n_way, 1)
         
     def get_label_map(self, labels):
-        # Create a map from labels to indexes
+        # Create a map from labels to indices
         labels = labels.numpy()
         unique = np.unique(labels)
         map = {label:idx for idx, label in enumerate(unique)}
@@ -82,9 +82,9 @@ class SNAIL(MetaTemplate):
         for i in range(n_query):
             for j in range(self.n_way):
                 indices = torch.randperm(support_set.shape[0])
-                
                 sup_set = support_set[indices]
                 sup_labels = support_labels[indices]
+                
                 query_sample = x[j, self.n_support + i, :].unsqueeze(0) # get a new query sample
                 seq = torch.cat((sup_set, query_sample), dim=0) # sequence of N x K + 1 samples
                 sequences.append(seq) # append to list of sequences
