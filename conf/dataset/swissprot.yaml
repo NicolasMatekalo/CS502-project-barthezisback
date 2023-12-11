@@ -13,7 +13,7 @@ dataset:
     _target_: datasets.prot.swissprot.SPSetDataset
 
 backbone:
-  _target_: backbones.fcnet.ResNet
+  _target_: backbones.resnet.ResNet
   block: backbones.blocks.SimpleBlock
   list_of_num_layers: [1, 1, 1, 1]
   layer_dim: [64, 128, 256, 512]
