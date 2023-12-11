@@ -1,0 +1,237 @@
+import math
+import torch
+import torch.nn as nn
+import wandb
+
+from methods.blocks import *
+from methods.meta_template import MetaTemplate
+
+class SNAIL(MetaTemplate):
+    def __init__(self, backbone, n_way, n_support):
+        # N-way, K-shot
+        super(SNAIL, self).__init__(backbone, n_way, n_support, change_way=False)
+        
+        self.loss_fn = nn.CrossEntropyLoss()
+        T = n_way * n_support + 1
+        
+        num_channels = self.feat_dim + n_way # (input_dim + one_hot_dim)
+        num_filters = int(math.ceil(math.log(T, 2)))
+        self.attention1 = AttentionBlock(num_channels, 64, 32)
+        
+        num_channels += 32
+        self.tc1 = TCBlock(num_channels, T, 128)
+        num_channels += num_filters * 128
+        self.attention2 = AttentionBlock(num_channels, 256, 128)
+        
+        num_channels += 128
+        self.tc2 = TCBlock(num_channels, T, 128)
+        num_channels += num_filters * 128
+        self.attention3 = AttentionBlock(num_channels, 512, 256)
+        
+        num_channels += 256
+        self.out = nn.Linear(num_channels, n_way)
+        # self.out = nn.Conv1d(num_channels, n_way, 1)
+        
+    def get_label_map(self, labels):
+        # Create a map from labels to indexes
+        labels = labels.numpy()
+        unique = np.unique(labels)
+        map = {label:idx for idx, label in enumerate(unique)}
+        
+        return map
+    
+    def get_one_hots(self, labels, map):
+        # Map labels to their one-hot representations
+        labels = labels.numpy()
+        idxs = [map[labels[i]] for i in range(labels.size)]
+        one_hot = np.zeros((labels.size, len(map)))
+        one_hot[np.arange(labels.size), idxs] = 1
+        
+        return one_hot, idxs
+
+    def forward(self, input, labels):
+        x = self.feature(input)
+        batch_size = int(labels.size()[0] / (self.n_way * self.n_support + 1))
+        last_idxs = [(i + 1) * (self.n_way * self.n_support + 1) - 1 for i in range(batch_size)]
+        labels[last_idxs] = torch.Tensor(np.zeros((batch_size, labels.size()[1]))).to(self.device)
+        
+        x = torch.cat((x, labels), 1)
+        x = x.view((batch_size, self.n_way * self.n_support + 1, -1))
+        x = self.attention1(x)
+        x = self.tc1(x)
+        x = self.attention2(x)
+        x = self.tc2(x)
+        # x = self.attention3(x).permute(0,2,1)
+        x = self.attention3(x)
+        x = self.out(x)
+        
+        return x
+    
+    def compute_batch(self, x, y=None):
+        sequences = []
+        # get support set and labels
+        support_set = x[:, :self.n_support, :] # N x K samples that are fixed for each sequence
+        support_set = support_set.contiguous().view(-1, x.shape[2]) # flatten to get (N * K, input_dim)
+        support_labels = y[:, :self.n_support].flatten() # N * K labels that are fixed for each sequence
+
+        # get label map
+        label_map = self.get_label_map(support_labels)
+
+        all_labels = []
+        pred_targets = []
+        n_query = x.shape[1] - self.n_support
+        for i in range(n_query):
+            for j in range(self.n_way):
+                query_sample = x[j, self.n_support + i, :].unsqueeze(0) # get a new query sample
+                seq = torch.cat((support_set, query_sample), dim=0) # sequence of N x K + 1 samples
+                sequences.append(seq) # append to list of sequences
+                
+                # Get labels one-hot representations and indexes
+                last_seq_label = y[j, self.n_support + i]
+                seq_labels = torch.cat((support_labels, torch.Tensor([last_seq_label]).long())) # N x K + 1 labels
+                labels, idxs = self.get_one_hots(seq_labels, label_map)
+
+                all_labels.append(labels)
+                pred_targets.append(idxs[-1])
+
+        # sequences are of shape (n_query * n_cls, (N * K + 1), input_dim))
+        # all_labels are of shape (n_query * n_cls, (N * K + 1), num_cls)
+        # pred_tagets are of shape (n_query * n_cls)
+
+        #labels = torch.Tensor(np.array(all_labels)).view(-1, self.n_way).to(self.device)
+        labels = torch.Tensor(np.array(all_labels)).to(self.device)
+        pred_targets = torch.Tensor(np.array(pred_targets)).long().to(self.device)
+        
+        sequences = torch.stack(sequences).to(self.device)
+        #sequences = sequences.view(-1, x.shape[2]).to(self.device)
+
+        return sequences, labels, pred_targets
+    
+    def set_forward(self, x, y=None):
+        sequences, labels, pred_targets = self.compute_batch(x, y)
+        
+        # Forward to the model
+        output = self.forward(sequences, labels)
+        # Get outputs for last sample
+        scores = output[:, -1, :]
+        
+        return scores, pred_targets
+    
+    def set_forward_loss(self, x, y=None):
+        scores, pred_targets = self.set_forward(x, y)
+        loss = self.loss_fn(scores, pred_targets)
+
+        return loss
+    
+    def new_set_forward(self, x, y=None):
+        output = self.forward(x, y)
+        scores = output[:, -1, :]
+        return scores
+
+    def new_set_forward_loss(self, x, y=None, targets=None):
+        scores = self.new_set_forward(x, y)
+        loss = self.loss_fn(scores, targets)
+
+        return loss
+    
+    def get_new_loader(self, train_loader):
+        all_seqs = []
+        all_labels = []
+        all_targets = []
+        for _, (x, y) in enumerate(train_loader):
+            sequences, labels, pred_targets = self.compute_batch(x, y)
+            all_seqs.append(sequences)
+            all_labels.append(labels)
+            all_targets.append(pred_targets)
+
+        all_seqs = torch.cat(all_seqs, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+        all_targets = torch.cat(all_targets, dim=0)
+
+        # shuffle all sequences, labels, and targets the same way
+        idxs = torch.randperm(all_seqs.size()[0])
+        all_seqs = all_seqs[idxs]
+        all_labels = all_labels[idxs]
+        all_targets = all_targets[idxs]
+
+        new_train_loader = [(all_seqs[i], all_labels[i], all_targets[i]) for i in range(all_seqs.size()[0])]
+        new_train_loader = torch.utils.data.DataLoader(new_train_loader, batch_size=32, shuffle=True)
+
+        return new_train_loader
+    
+    def train_loop(self, epoch, train_loader, optimizer):
+        print_freq = 10
+
+        new_train_loader = self.get_new_loader(train_loader)
+        for i, (seq, lab, targ) in enumerate(new_train_loader):
+            if isinstance(seq, list):
+                self.n_query = seq[0].size(1) - self.n_support
+            else: 
+                self.n_query = seq.size(1) - self.n_support
+
+            seq = seq.view(-1, self.feat_dim)
+            lab = lab.view(-1, self.n_way)
+            optimizer.zero_grad()
+            loss = self.new_set_forward_loss(seq, lab, targ)
+            loss.backward()
+            optimizer.step()
+            avg_loss = avg_loss + loss.item()
+
+            if i % print_freq == 0:
+                print('Epoch {:d} | Batch {:d}/{:d} | Loss {:f}'.format(epoch, i, len(new_train_loader),
+                                                                        avg_loss / float(i + 1)))
+                wandb.log({"loss": avg_loss / float(i + 1)})
+
+        '''for i, (x, y) in enumerate(train_loader):
+            if isinstance(x, list):
+                self.n_query = x[0].size(1) - self.n_support
+            else: 
+                self.n_query = x.size(1) - self.n_support
+                
+            optimizer.zero_grad()
+            loss = self.set_forward_loss(x, y)
+            loss.backward()
+            optimizer.step()
+            avg_loss = avg_loss + loss.item()
+
+            if i % print_freq == 0:
+                print('Epoch {:d} | Batch {:d}/{:d} | Loss {:f}'.format(epoch, i, len(train_loader),
+                                                                        avg_loss / float(i + 1)))
+                wandb.log({"loss": avg_loss / float(i + 1)})'''
+                
+    def correct(self, x, y=None):
+        scores, pred_targets = self.set_forward(x, y)
+        y_query = pred_targets.cpu().numpy().tolist()
+
+        topk_scores, topk_labels = scores.data.topk(1, 1, True, True)
+        topk_ind = topk_labels.cpu().numpy()
+        top1_correct = np.sum(topk_ind[:, 0] == y_query)
+        return float(top1_correct), len(y_query)
+    
+    def test_loop(self, test_loader, record=None, return_std=False):
+        correct = 0
+        count = 0
+        acc_all = []
+
+        iter_num = len(test_loader)
+        for i, (x, y) in enumerate(test_loader):
+            if isinstance(x, list):
+                self.n_query = x[0].size(1) - self.n_support
+                if self.change_way:
+                    self.n_way = x[0].size(0)
+            else: 
+                self.n_query = x.size(1) - self.n_support
+                if self.change_way:
+                    self.n_way = x.size(0)
+            correct_this, count_this = self.correct(x, y)
+            acc_all.append(correct_this / count_this * 100)
+
+        acc_all = np.asarray(acc_all)
+        acc_mean = np.mean(acc_all)
+        acc_std = np.std(acc_all)
+        print('%d Test Acc = %4.2f%% +- %4.2f%%' % (iter_num, acc_mean, 1.96 * acc_std / np.sqrt(iter_num)))
+
+        if return_std:
+            return acc_mean, acc_std
+        else:
+            return acc_mean
