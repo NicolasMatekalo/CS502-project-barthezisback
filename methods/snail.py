@@ -15,7 +15,7 @@ class SNAIL(MetaTemplate):
         T = n_way * n_support + 1
         
         num_channels = self.feat_dim + n_way # (input_dim + one_hot_dim)
-        num_filters = int(math.ceil(math.log(T, 2)))
+        num_filters = int(math.ceil(math.log2(T)))
         self.attention1 = AttentionBlock(num_channels, 64, 32)
         
         num_channels += 32
