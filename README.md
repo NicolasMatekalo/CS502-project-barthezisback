@@ -55,7 +55,7 @@ in the form `checkpoint.time={yyyymmdd_hhmmss}.` To choose a model from a specif
 
 ### Reproduction of results
 
-One can reproduce the results we obtained for the several models we trained by simply running `run.py` with the same parameters as the ones described in the report and with `method=snail`.
+One can reproduce the results we were able to obtain by simply running `run.py` with the same parameters as the ones described in the report and with `method=snail`.
 For example, to train SNAIL on Tabula Muris with a fully-connected backbone composed of 2 layers of 64 input dimensions, with a learning rate of 0.001, and for 60 epochs, one may run :
 
 ```bash
