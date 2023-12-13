@@ -4,10 +4,94 @@ from hydra.utils import instantiate
 from math import ceil
 from omegaconf import OmegaConf
 from prettytable import PrettyTable
+import numpy as np
+import torch
 
 from datasets.cell.tabula_muris import *
 from utils.io_utils import get_resume_file, hydra_setup, fix_seed, model_to_dict, opt_to_dict, get_model_file
 
+def labels_to_one_hot(labels):
+    labels = labels.numpy()
+    unique = np.unique(labels)
+    map = {label:idx for idx, label in enumerate(unique)}
+    idxs = [map[labels[i]] for i in range(labels.size)]
+    one_hot = np.zeros((labels.size, unique.size))
+    one_hot[np.arange(labels.size), idxs] = 1
+    return one_hot, idxs
+
+def new_seq_batch(cfg, x, y):
+    sequences = []
+
+    # get support set and labels
+    support_set = x[:, :cfg.n_shot, :] # N x K samples that are fixed for each sequence
+    support_set = support_set.contiguous().view(-1, x.shape[2]) # flatten to get (N * K, input_dim)
+    n_query = x.shape[1] - cfg.n_shot
+    support_labels = y[:, :cfg.n_shot].flatten() # N * K labels that are fixed for each sequence
+
+    all_labels = []
+    pred_targets = []
+    for i in range(cfg.n_way):
+        for j in range(n_query):
+            # shuffle support set and labels
+            perm = torch.randperm(support_labels.shape[0])
+            sup_set = support_set[perm]
+            sup_labels = support_labels[perm]
+
+            query_sample = x[i, cfg.n_shot + j, :].unsqueeze(0) # get a new query sample
+            seq = torch.cat((sup_set, query_sample), dim=0) # sequence of N x K + 1 samples
+            sequences.append(seq) # append to list of sequences
+            
+            last_seq_label = y[i, cfg.n_shot + j]
+            seq_labels = torch.cat((sup_labels, torch.Tensor([last_seq_label]).long())) # N x K + 1 labels
+            labels, idxs = labels_to_one_hot(seq_labels)
+
+            all_labels.append(labels)
+            pred_targets.append(idxs[-1])
+
+    # sequences are of shape (n_query * n_cls, (N * K + 1), input_dim))
+    # all_labels are of shape (n_query * n_cls, (N * K + 1), num_cls)
+    # pred_tagets are of shape (n_query * n_cls)
+
+    labels = torch.Tensor(np.array(all_labels))
+    pred_targets = torch.Tensor(pred_targets).long()
+    sequences = torch.stack(sequences)
+
+
+    return sequences, labels, pred_targets
+
+
+def generate_seq_loader(cfg, loader):
+    '''
+    Generate a new data loader that shuffles the sequences, labels, and pred_targets of the whole dataset.
+    This method cannot be called directly without some minor modifications in the snail code, due to the shape of the 
+    tensors returned.
+    '''
+    all_seqs = []
+    all_labels = []
+    all_pred_targets = []
+
+    for x, y in loader:
+        sequences, labels, pred_targets = new_seq_batch(cfg, x, y)
+        all_seqs.append(sequences)
+        all_labels.append(labels)
+        all_pred_targets.append(pred_targets)
+
+    all_seqs = torch.cat(all_seqs, dim=0)
+    all_labels = torch.cat(all_labels, dim=0)
+    all_pred_targets = torch.cat(all_pred_targets, dim=0)
+
+    # shuffle sequences, labels, and pred_targets the same way
+    perm = torch.randperm(all_seqs.shape[0])
+    all_seqs = all_seqs[perm]
+    all_labels = all_labels[perm]
+    all_pred_targets = all_pred_targets[perm]
+
+    # create the new loader
+    batch_size = cfg.n_way * cfg.n_query
+    seq_loader = [(all_seqs[i], all_labels[i], all_pred_targets[i]) for i in range(all_seqs.shape[0])]
+    seq_loader = torch.utils.data.DataLoader(seq_loader, batch_size=batch_size, shuffle=False) # already shuffled
+
+    return seq_loader
 
 def initialize_dataset_model(cfg):
     # Instantiate train dataset as specified in dataset config under simple_cls or set_cls
@@ -18,6 +102,10 @@ def initialize_dataset_model(cfg):
     else:
         raise ValueError(f"Unknown method type: {cfg.method.type}")
     train_loader = train_dataset.get_data_loader()
+
+    # example call to generate a shuffled loader
+    if cfg.method.name == "snail_shuffle":
+        val_loader = generate_seq_loader(cfg, val_loader)
 
     # Instantiate val dataset as specified in dataset config under simple_cls or set_cls
     # Eval type (simple or set) is specified in method config, rather than dataset config
