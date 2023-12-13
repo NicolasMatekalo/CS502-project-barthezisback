@@ -3,12 +3,6 @@ defaults:
 
 name: snail
 
-# snail_inner_lr: 0.01
-
-# SNAIL reqires special gradient updates in backbone
-# fast_weight: True
-
 # For instantiate API
 cls:
   _target_: methods.snail.SNAIL
-  # inner_lr: ${method.snail_inner_lr}

@@ -14,7 +14,7 @@ dataset:
 
 backbone:
   _target_: backbones.fcnet.FCNet
-  layer_dim: [ 512, 512]
+  layer_dim: [ 512, 512 ]
 
 train_classes: 7195
 

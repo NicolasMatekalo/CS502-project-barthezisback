@@ -17,7 +17,7 @@ class CasualConv1d(nn.Module):
         # Takes something of shape (N, in_channels, T),
         # returns (N, out_channels, T)
         out = self.conv1d(input)
-        return out[:, :, :-self.dilation] # TODO: make this correct for different strides/padding
+        return out[:, :, :-self.dilation]
 
 class DenseBlock(nn.Module):
     def __init__(self, in_channels, dilation, filters, kernel_size=2):
@@ -59,7 +59,6 @@ class AttentionBlock(nn.Module):
         mask = np.array([[1 if i>j else 0 for i in range(input.shape[1])] for j in range(input.shape[1])])
         mask = torch.ByteTensor(mask).cuda()
 
-        #import pdb; pdb.set_trace()
         keys = self.linear_keys(input) # shape: (N, T, key_size)
         query = self.linear_query(input) # shape: (N, T, key_size)
         values = self.linear_values(input) # shape: (N, T, value_size)
